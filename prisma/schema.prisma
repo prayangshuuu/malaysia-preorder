@@ -1,0 +1,936 @@
+// Prisma Schema for Malaysia → Bangladesh Pre-Order Platform
+// Single-tenant architecture for one cross-border sourcing & delivery company.
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// -----------------------------------------------------------------------------
+// ENUMS & STATE MACHINES
+// -----------------------------------------------------------------------------
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+  OPERATIONS
+  FINANCE
+  SUPPORT
+}
+
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum PricingType {
+  FIXED_PRICE
+  REQUEST_QUOTE_ONLY
+}
+
+enum InquiryStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  NEEDS_INFORMATION
+  QUOTED
+  ACCEPTED
+  DECLINED
+  CANCELLED
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  SUPERSEDED
+}
+
+enum OrderStatus {
+  AWAITING_PAYMENT
+  PAYMENT_REVIEW
+  PAID
+  PROCUREMENT
+  PACKING
+  DISPATCHED
+  IN_TRANSIT
+  CUSTOMS
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  REFUND_PENDING
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  REQUIRES_ACTION
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  PARTIALLY_REFUNDED
+  REFUNDED
+  REVERSED
+}
+
+enum PaymentMethodType {
+  BKASH
+  NAGAD
+  SSLCOMMERZ
+  BANK_TRANSFER
+  WALLET
+  MANUAL_VERIFICATION
+}
+
+enum RefundStatus {
+  PENDING
+  APPROVED
+  PROCESSING
+  COMPLETED
+  REJECTED
+}
+
+enum WalletLedgerEntryType {
+  TOP_UP
+  ORDER_PAYMENT
+  ORDER_REFUND
+  ADJUSTMENT_CREDIT
+  ADJUSTMENT_DEBIT
+  REVERSAL
+}
+
+enum ProcurementStatus {
+  NOT_STARTED
+  SOURCING
+  PURCHASED
+  UNAVAILABLE
+  CANCELLED
+}
+
+enum ShipmentStatus {
+  NOT_READY
+  READY_TO_DISPATCH
+  DISPATCHED
+  IN_TRANSIT
+  DELAYED
+  CUSTOMS
+  OUT_FOR_DELIVERY
+  DELIVERED
+  LOST
+  RETURNED
+}
+
+enum AddressType {
+  SHIPPING
+  BILLING
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  ARCHIVED
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+// -----------------------------------------------------------------------------
+// USER & IDENTITY
+// -----------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  phone         String?   @unique
+  name          String
+  passwordHash  String?
+  role          UserRole  @default(CUSTOMER)
+  isActive      Boolean   @default(true)
+  emailVerified DateTime?
+  phoneVerified DateTime?
+
+  // Relations
+  profile            CustomerProfile?
+  addresses          Address[]
+  inquiries          ProductInquiry[]
+  inquiryMessages    InquiryMessage[]
+  quotesAccepted     Quote[]                @relation("CustomerAcceptedQuotes")
+  quotesAdminCreated Quote[]                @relation("AdminCreatedQuotes")
+  orders             Order[]                @relation("CustomerOrders")
+  walletAccount      WalletAccount?
+  notifications      Notification[]
+  auditLogsActed     AuditLog[]             @relation("AuditActor")
+  supportTickets     SupportTicket[]
+  supportMessages    SupportTicketMessage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+  @@index([email])
+}
+
+model CustomerProfile {
+  id            String  @id @default(uuid())
+  userId        String  @unique
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preferredCity String?
+  district      String?
+  division      String?
+  defaultNotes  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Address {
+  id     String      @id @default(uuid())
+  userId String
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type   AddressType @default(SHIPPING)
+  isDefault Boolean  @default(false)
+
+  recipientName  String
+  phoneNumber    String
+  streetAddress  String
+  thanaOrUpazila String?
+  district       String
+  division       String
+  postalCode     String?
+  country        String  @default("Bangladesh")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// -----------------------------------------------------------------------------
+// PRODUCT CATALOGUE
+// -----------------------------------------------------------------------------
+
+model ProductCategory {
+  id           String            @id @default(uuid())
+  name         String
+  slug         String            @unique
+  description  String?
+  imageUrl     String?
+  parentId     String?
+  parent       ProductCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children     ProductCategory[] @relation("CategoryHierarchy")
+  displayOrder Int               @default(0)
+  isActive     Boolean           @default(true)
+
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parentId])
+  @@index([slug])
+}
+
+model Product {
+  id          String          @id @default(uuid())
+  title       String
+  slug        String          @unique
+  shortDesc   String?
+  description String?
+  categoryId  String
+  category    ProductCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  status      ProductStatus @default(DRAFT)
+  pricingType PricingType   @default(FIXED_PRICE)
+
+  // Customer-facing display pricing in BDT
+  displayPriceBDT  Decimal? @db.Decimal(12, 2)
+  estimatedDaysMin Int?
+  estimatedDaysMax Int?
+
+  // Sourcing & Private Supplier Reference (Admin-only visibility)
+  originCountry     String    @default("Malaysia")
+  sourceUrl         String?
+  defaultSupplierId String?
+  defaultSupplier   Supplier? @relation(fields: [defaultSupplierId], references: [id], onDelete: SetNull)
+  approxCostMYR     Decimal?  @db.Decimal(12, 2)
+  adminNotes        String?
+
+  // Relations
+  images     ProductImage[]
+  inquiries  ProductInquiry[]
+  quoteLines QuoteLineItem[]
+  orderLines OrderLineItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([categoryId])
+  @@index([slug])
+}
+
+model ProductImage {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  imageUrl  String
+  altText   String?
+  isPrimary Boolean  @default(false)
+  sortOrder Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+}
+
+// -----------------------------------------------------------------------------
+// PRODUCT INQUIRIES
+// -----------------------------------------------------------------------------
+
+model ProductInquiry {
+  id            String @id @default(uuid())
+  inquiryNumber String @unique // e.g. INQ-2026-0001
+  userId        String
+  user          User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  // Optional link to existing catalog product
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  // Custom requested item details
+  productName       String
+  referenceUrl      String?
+  brandOrModel      String?
+  specifications    String?
+  quantityRequested Int      @default(1)
+  targetBudgetBDT   Decimal? @db.Decimal(12, 2)
+
+  status            InquiryStatus @default(SUBMITTED)
+  adminPrivateNotes String?
+
+  // Relations
+  attachments   InquiryAttachment[]
+  messages      InquiryMessage[]
+  statusHistory InquiryStatusHistory[]
+  quotes        Quote[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([inquiryNumber])
+}
+
+model InquiryAttachment {
+  id            String         @id @default(uuid())
+  inquiryId     String
+  inquiry       ProductInquiry @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  fileUrl       String
+  fileType      String?
+  fileName      String?
+  fileSizeBytes Int?
+
+  createdAt DateTime @default(now())
+
+  @@index([inquiryId])
+}
+
+model InquiryMessage {
+  id          String         @id @default(uuid())
+  inquiryId   String
+  inquiry     ProductInquiry @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  senderId    String
+  sender      User           @relation(fields: [senderId], references: [id], onDelete: Restrict)
+  messageText String
+  isStaffOnly Boolean        @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([inquiryId])
+  @@index([senderId])
+}
+
+model InquiryStatusHistory {
+  id          String         @id @default(uuid())
+  inquiryId   String
+  inquiry     ProductInquiry @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  fromStatus  InquiryStatus?
+  toStatus    InquiryStatus
+  changedById String?
+  reason      String?
+
+  createdAt DateTime @default(now())
+
+  @@index([inquiryId])
+}
+
+// -----------------------------------------------------------------------------
+// QUOTES & QUOTE VERSIONS
+// -----------------------------------------------------------------------------
+
+model Quote {
+  id          String         @id @default(uuid())
+  quoteNumber String         @unique // e.g. QUO-2026-0001
+  version     Int            @default(1)
+  inquiryId   String
+  inquiry     ProductInquiry @relation(fields: [inquiryId], references: [id], onDelete: Restrict)
+
+  createdById String
+  createdBy   User   @relation("AdminCreatedQuotes", fields: [createdById], references: [id], onDelete: Restrict)
+
+  status     QuoteStatus @default(DRAFT)
+  validUntil DateTime
+
+  // Financial Breakdown (Customer Facing in BDT)
+  currency         String  @default("BDT")
+  itemsSubtotalBDT Decimal @db.Decimal(12, 2)
+  serviceFeeBDT    Decimal @default(0) @db.Decimal(12, 2)
+  shippingFeeBDT   Decimal @default(0) @db.Decimal(12, 2)
+  customsFeeBDT    Decimal @default(0) @db.Decimal(12, 2)
+  discountBDT      Decimal @default(0) @db.Decimal(12, 2)
+  totalAmountBDT   Decimal @db.Decimal(12, 2)
+
+  // Internal Admin Sourcing Estimate (Private)
+  estCostMYR      Decimal? @db.Decimal(12, 2)
+  estExchangeRate Decimal? @db.Decimal(10, 4) // e.g. 1 MYR = 27.50 BDT
+
+  // Logistics terms snapshotted
+  shippingMethod     String? // Air Express, Standard Air, Cargo Sea
+  estDispatchDaysMin Int?
+  estDispatchDaysMax Int?
+  estDeliveryDaysMin Int?
+  estDeliveryDaysMax Int?
+  termsAndConditions String?
+  customerNotes      String?
+  adminNotes         String?
+
+  // Acceptance / Rejection tracking
+  acceptedAt      DateTime?
+  acceptedById    String?
+  acceptedBy      User?     @relation("CustomerAcceptedQuotes", fields: [acceptedById], references: [id], onDelete: Restrict)
+  rejectedAt      DateTime?
+  rejectionReason String?
+
+  // Relations
+  lineItems QuoteLineItem[]
+  orders    Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([inquiryId, version])
+  @@index([inquiryId])
+  @@index([status])
+  @@index([quoteNumber])
+}
+
+model QuoteLineItem {
+  id      String @id @default(uuid())
+  quoteId String
+  quote   Quote  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  title       String
+  description String?
+  sourceUrl   String?
+  quantity    Int     @default(1)
+
+  unitPriceBDT  Decimal @db.Decimal(12, 2)
+  totalPriceBDT Decimal @db.Decimal(12, 2)
+
+  // Private supplier reference for this line
+  estUnitCostMYR Decimal? @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([quoteId])
+}
+
+// -----------------------------------------------------------------------------
+// ORDERS & SNAPSHOTS
+// -----------------------------------------------------------------------------
+
+model Order {
+  id          String @id @default(uuid())
+  orderNumber String @unique // e.g. ORD-2026-0001
+  customerId  String
+  customer    User   @relation("CustomerOrders", fields: [customerId], references: [id], onDelete: Restrict)
+
+  quoteId String?
+  quote   Quote?  @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+
+  // State Machines
+  status            OrderStatus       @default(AWAITING_PAYMENT)
+  paymentStatus     PaymentStatus     @default(PENDING)
+  procurementStatus ProcurementStatus @default(NOT_STARTED)
+  shipmentStatus    ShipmentStatus    @default(NOT_READY)
+
+  // Snapshotted Agreed Financials (BDT)
+  currency         String  @default("BDT")
+  itemsSubtotalBDT Decimal @db.Decimal(12, 2)
+  serviceFeeBDT    Decimal @default(0) @db.Decimal(12, 2)
+  shippingFeeBDT   Decimal @default(0) @db.Decimal(12, 2)
+  customsFeeBDT    Decimal @default(0) @db.Decimal(12, 2)
+  discountBDT      Decimal @default(0) @db.Decimal(12, 2)
+  totalAmountBDT   Decimal @db.Decimal(12, 2)
+  paidAmountBDT    Decimal @default(0) @db.Decimal(12, 2)
+
+  // Snapshotted Delivery Address (Immutable even if user edits profile)
+  shippingRecipientName  String
+  shippingPhoneNumber    String
+  shippingStreetAddress  String
+  shippingThanaOrUpazila String?
+  shippingDistrict       String
+  shippingDivision       String
+  shippingPostalCode     String?
+  shippingCountry        String  @default("Bangladesh")
+
+  customerNotes String?
+  adminNotes    String?
+
+  // Relations
+  lineItems     OrderLineItem[]
+  events        OrderEvent[]
+  statusHistory OrderStatusHistory[]
+  payments      Payment[]
+  refunds       Refund[]
+  procurements  ProcurementRecord[]
+  shipments     Shipment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([orderNumber])
+}
+
+model OrderLineItem {
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  // Snapshotted product details at moment of order creation
+  itemTitle       String
+  itemDescription String?
+  sourceUrl       String?
+  quantity        Int     @default(1)
+  unitPriceBDT    Decimal @db.Decimal(12, 2)
+  totalPriceBDT   Decimal @db.Decimal(12, 2)
+
+  // Relations
+  procurements ProcurementRecord[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+}
+
+model OrderEvent {
+  id                String   @id @default(uuid())
+  orderId           String
+  order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  eventType         String // e.g. STATUS_CHANGE, PAYMENT_RECEIVED, DISPATCHED, NOTE_ADDED
+  title             String
+  description       String?
+  isCustomerVisible Boolean  @default(true)
+  createdById       String?
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model OrderStatusHistory {
+  id          String       @id @default(uuid())
+  orderId     String
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fromStatus  OrderStatus?
+  toStatus    OrderStatus
+  changedById String?
+  reason      String?
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+}
+
+// -----------------------------------------------------------------------------
+// PAYMENTS & WEBHOOK IDEMPOTENCY
+// -----------------------------------------------------------------------------
+
+model Payment {
+  id            String @id @default(uuid())
+  paymentNumber String @unique // e.g. PAY-2026-0001
+  orderId       String
+  order         Order  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  method PaymentMethodType
+  status PaymentStatus     @default(PENDING)
+
+  currency String  @default("BDT")
+  amount   Decimal @db.Decimal(12, 2)
+
+  // External Provider references
+  provider          String? // e.g. bkash, sslcommerz, nagad, manual
+  providerTrxId     String? @unique // Provider's unique transaction identifier
+  providerPaymentId String? // Provider checkout/session ID
+  providerPayload   Json? // Safe sanitized response snapshot (NO RAW CARDS/CVV)
+
+  idempotencyKey String? @unique
+  failureReason  String?
+
+  verifiedAt   DateTime?
+  verifiedById String?
+
+  // Relations
+  attempts PaymentAttempt[]
+  refunds  Refund[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([status])
+  @@index([providerTrxId])
+}
+
+model PaymentAttempt {
+  id        String  @id @default(uuid())
+  paymentId String
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  method       PaymentMethodType
+  gatewayRef   String?
+  rawStatus    String?
+  requestData  Json? // Sanitized request (no secrets)
+  responseData Json? // Sanitized provider response
+  ipAddress    String?
+  userAgent    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([paymentId])
+}
+
+model Refund {
+  id        String   @id @default(uuid())
+  refundNumber String @unique // e.g. REF-2026-0001
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  paymentId String?
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  amount   Decimal      @db.Decimal(12, 2)
+  currency String       @default("BDT")
+  status   RefundStatus @default(PENDING)
+  reason   String
+
+  // Provider refund reference if refunded back through payment gateway
+  providerRefundId String?   @unique
+  approvedById     String?
+  processedAt      DateTime?
+
+  // Compensating Wallet ledger entry if refunded to wallet balance
+  walletLedgerEntry WalletLedgerEntry?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([status])
+}
+
+model WebhookEvent {
+  id           String    @id @default(uuid())
+  provider     String // e.g. bkash, sslcommerz
+  eventId      String // Unique identifier sent by provider
+  eventType    String? // e.g. PaymentSuccess, RefundProcessed
+  payload      Json
+  headers      Json?
+  signature    String?
+  isProcessed  Boolean   @default(false)
+  processedAt  DateTime?
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([provider, eventId])
+  @@index([provider])
+  @@index([isProcessed])
+}
+
+// -----------------------------------------------------------------------------
+// WALLET & APPEND-ONLY AUDITABLE LEDGER
+// -----------------------------------------------------------------------------
+
+model WalletAccount {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  currency String  @default("BDT")
+  // Cached aggregate balance; validated against SUM(ledger) in critical operations
+  balance  Decimal @default(0) @db.Decimal(12, 2)
+  isActive Boolean @default(true)
+
+  // Append-only ledger
+  ledgerEntries WalletLedgerEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model WalletLedgerEntry {
+  id       String        @id @default(uuid())
+  walletId String
+  wallet   WalletAccount @relation(fields: [walletId], references: [id], onDelete: Restrict)
+
+  entryType    WalletLedgerEntryType
+  amount       Decimal               @db.Decimal(12, 2) // Positive for credits, negative for debits
+  balanceAfter Decimal               @db.Decimal(12, 2) // Snapshot of balance immediately after entry
+  currency     String                @default("BDT")
+
+  idempotencyKey String @unique // Strict idempotency to prevent double-crediting
+  referenceNote  String
+
+  // External link associations
+  paymentId String? // If top-up derived from verified payment
+  orderId   String? // If used to pay for an order
+  refundId  String? @unique // If compensation for a refund
+  refund    Refund? @relation(fields: [refundId], references: [id], onDelete: Restrict)
+
+  createdById String? // System or Admin actor ID
+  createdAt   DateTime @default(now())
+
+  @@index([walletId])
+  @@index([entryType])
+  @@index([createdAt])
+}
+
+// -----------------------------------------------------------------------------
+// MALAYSIA PROCUREMENT & PRIVATE SUPPLIER RECORDS
+// -----------------------------------------------------------------------------
+
+model Supplier {
+  id            String  @id @default(uuid())
+  name          String
+  contactPerson String?
+  email         String?
+  phone         String?
+  address       String?
+  city          String? @default("Kuala Lumpur")
+  country       String  @default("Malaysia")
+  notes         String? // Internal admin remarks
+  isActive      Boolean @default(true)
+
+  products     Product[]
+  procurements ProcurementRecord[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ProcurementRecord {
+  id              String         @id @default(uuid())
+  procurementCode String         @unique // e.g. PROC-2026-0001
+  orderId         String
+  order           Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  orderLineItemId String?
+  orderLineItem   OrderLineItem? @relation(fields: [orderLineItemId], references: [id], onDelete: SetNull)
+
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  status ProcurementStatus @default(NOT_STARTED)
+
+  // Confidential purchasing cost data (Strictly Private to Staff)
+  purchaseCostMYR    Decimal   @db.Decimal(12, 2)
+  exchangeRateUsed   Decimal   @db.Decimal(10, 4)
+  purchaseCostBDT    Decimal   @db.Decimal(12, 2)
+  supplierInvoiceRef String?
+  purchasedAt        DateTime?
+  purchasedById      String?
+  notes              String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([supplierId])
+  @@index([status])
+}
+
+// -----------------------------------------------------------------------------
+// SHIPMENTS & TRACKING
+// -----------------------------------------------------------------------------
+
+model Shipment {
+  id             String @id @default(uuid())
+  shipmentNumber String @unique // e.g. SHP-2026-0001
+  orderId        String
+  order          Order  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  carrierName    String? // e.g. DHL Express, Pos Malaysia, Air Cargo, Sea Freight
+  trackingNumber String?
+  trackingUrl    String?
+  status         ShipmentStatus @default(NOT_READY)
+
+  // Origin & Destination details
+  dispatchOrigin     String @default("Malaysia")
+  destinationCountry String @default("Bangladesh")
+
+  estimatedDeparture DateTime?
+  actualDeparture    DateTime?
+  estimatedArrival   DateTime?
+  actualArrival      DateTime?
+
+  // Package specs
+  weightKg           Decimal? @db.Decimal(8, 2)
+  dimensionsCm       String? // L x W x H
+  internalCargoNotes String?
+
+  // Relations
+  events ShipmentEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([status])
+  @@index([trackingNumber])
+}
+
+model ShipmentEvent {
+  id         String   @id @default(uuid())
+  shipmentId String
+  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  status      ShipmentStatus
+  location    String? // e.g. "Kuala Lumpur Hub", "Hazrat Shahjalal Int Airport, Dhaka"
+  description String
+  isPublic    Boolean        @default(true)
+  timestamp   DateTime       @default(now())
+
+  createdAt DateTime @default(now())
+
+  @@index([shipmentId])
+}
+
+// -----------------------------------------------------------------------------
+// NOTIFICATIONS, SUPPORT & AUDIT
+// -----------------------------------------------------------------------------
+
+model Notification {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title   String
+  message String
+  channel NotificationChannel @default(IN_APP)
+  status  NotificationStatus  @default(UNREAD)
+  linkUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model SupportTicket {
+  id           String @id @default(uuid())
+  ticketNumber String @unique // e.g. TKT-2026-0001
+  userId       String?
+  user         User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  customerName  String
+  customerEmail String
+  customerPhone String?
+  subject       String
+  status        SupportTicketStatus @default(OPEN)
+
+  messages SupportTicketMessage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model SupportTicketMessage {
+  id          String        @id @default(uuid())
+  ticketId    String
+  ticket      SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  senderId    String?
+  sender      User?         @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  messageText String
+  isStaff     Boolean       @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([ticketId])
+}
+
+model CompanySetting {
+  id          String   @id @default(uuid())
+  key         String   @unique // e.g. "COMPANY_NAME", "DEFAULT_MYR_BDT_RATE", "SUPPORT_PHONE"
+  value       String
+  description String?
+  isPublic    Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id         String  @id @default(uuid())
+  actorId    String?
+  actor      User?   @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorEmail String?
+  actorRole  String?
+
+  action     String // e.g. QUOTE_ACCEPTED, PAYMENT_VERIFIED, LEDGER_CREDITED, SUPPLIER_CREATED
+  entityType String // e.g. Order, Quote, WalletLedgerEntry, Payment
+  entityId   String?
+  metadata   Json? // Safe payload snapshot (no secrets, no sensitive card numbers)
+  ipAddress  String?
+  userAgent  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+}
