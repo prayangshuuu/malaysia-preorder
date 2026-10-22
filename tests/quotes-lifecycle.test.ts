@@ -112,7 +112,7 @@ test("Quote Lifecycle: Versioning, Expiry, IDOR Ownership, and Concurrency Safe 
           { id: otherCustomer.id, email: otherCustomer.email, name: otherCustomer.name }
         );
       },
-      (err: any) => {
+      (err: unknown) => {
         assert.ok(err instanceof QuoteServiceError);
         assert.equal(err.code, "FORBIDDEN_OWNERSHIP");
         return true;
@@ -179,7 +179,7 @@ test("Quote Lifecycle: Versioning, Expiry, IDOR Ownership, and Concurrency Safe 
           { id: customerUser.id, email: customerUser.email, name: customerUser.name }
         );
       },
-      (err: any) => {
+      (err: unknown) => {
         assert.ok(err instanceof QuoteServiceError);
         assert.equal(err.code, "QUOTE_SUPERSEDED");
         return true;
@@ -215,7 +215,7 @@ test("Quote Lifecycle: Versioning, Expiry, IDOR Ownership, and Concurrency Safe 
           { id: customerUser.id, email: customerUser.email, name: customerUser.name }
         );
       },
-      (err: any) => {
+      (err: unknown) => {
         assert.ok(err instanceof QuoteServiceError);
         assert.equal(err.code, "QUOTE_EXPIRED");
         return true;
@@ -273,7 +273,7 @@ test("Quote Lifecycle: Versioning, Expiry, IDOR Ownership, and Concurrency Safe 
           { id: customerUser.id, email: customerUser.email, name: customerUser.name }
         );
       },
-      (err: any) => {
+      (err: unknown) => {
         assert.ok(err instanceof QuoteServiceError);
         assert.equal(err.code, "ALREADY_ACCEPTED");
         return true;
@@ -297,7 +297,7 @@ test("Quote Lifecycle: Versioning, Expiry, IDOR Ownership, and Concurrency Safe 
           { id: adminUser.id, email: adminUser.email, role: adminUser.role }
         );
       },
-      (err: any) => {
+      (err: unknown) => {
         assert.ok(err instanceof QuoteServiceError);
         assert.equal(err.code, "QUOTE_ALREADY_ACCEPTED");
         return true;

@@ -3,6 +3,7 @@ import { prisma } from "../prisma";
 import { paymentRegistry } from "./registry";
 import { ParsedWebhookEvent } from "./types";
 import { sanitizePayload, safePaymentLog } from "./sanitizer";
+import { sendCustomerNotification, NotificationTemplates } from "../notifications";
 
 export interface ProcessWebhookResult {
   success: boolean;
@@ -433,6 +434,46 @@ export async function processVerifiedWebhookEvent(
     orderId: result.orderId,
     status: result.status,
   });
+
+  // Notify customer about verified/failed payment
+  try {
+    const orderRecord = await prisma.order.findUnique({
+      where: { id: result.orderId },
+      select: { id: true, customerId: true, orderNumber: true, totalAmountBDT: true },
+    });
+
+    if (orderRecord && orderRecord.customerId) {
+      if (result.status === PaymentStatus.SUCCEEDED) {
+        const notif = NotificationTemplates.paymentVerified(
+          orderRecord.orderNumber,
+          Number(orderRecord.totalAmountBDT).toFixed(2),
+          orderRecord.id
+        );
+        await sendCustomerNotification({
+          userId: orderRecord.customerId,
+          title: notif.title,
+          message: notif.message,
+          linkUrl: notif.linkUrl,
+          emailSubject: notif.emailSubject,
+          category: notif.category,
+          idempotencyKey: `payment-verified:${result.paymentId}:${result.status}`,
+        });
+      } else if (result.status === PaymentStatus.FAILED) {
+        const notif = NotificationTemplates.paymentFailed(orderRecord.orderNumber, orderRecord.id);
+        await sendCustomerNotification({
+          userId: orderRecord.customerId,
+          title: notif.title,
+          message: notif.message,
+          linkUrl: notif.linkUrl,
+          emailSubject: notif.emailSubject,
+          category: notif.category,
+          idempotencyKey: `payment-failed:${result.paymentId}:${result.status}`,
+        });
+      }
+    }
+  } catch (notifErr) {
+    console.error("[Payment Notification] Error notifying customer:", notifErr);
+  }
 
   return {
     success: true,

@@ -17,6 +17,7 @@ import {
   ImmutableQuoteAcceptanceSnapshot,
 } from "./types";
 import { logAudit } from "@/lib/audit";
+import { sendCustomerNotification, NotificationTemplates } from "@/lib/notifications";
 
 export class QuoteServiceError extends Error {
   public code: string;
@@ -345,6 +346,24 @@ export async function createOrVersionQuote(
       },
     });
 
+    // 9. Dispatch Customer Notification if quote was SENT
+    if (input.status === QuoteStatus.SENT && inquiry.userId) {
+      const template = NotificationTemplates.quoteSent(
+        createdQuote.quoteNumber,
+        createdQuote.validUntil.toLocaleDateString(),
+        createdQuote.id
+      );
+      await sendCustomerNotification({
+        userId: inquiry.userId,
+        title: template.title,
+        message: template.message,
+        linkUrl: template.linkUrl,
+        emailSubject: template.emailSubject,
+        category: template.category,
+        idempotencyKey: `quote-sent:${createdQuote.id}:v${createdQuote.version}`,
+      });
+    }
+
     return createdQuote;
   });
 }
@@ -672,6 +691,22 @@ export async function acceptQuote(
         totalBDT: calculatedTotals.totalAmountBDT,
         acceptedAt: acceptedAt.toISOString(),
       },
+    });
+
+    // 13. Notify Customer of Order Creation upon Acceptance
+    const acceptedTemplate = NotificationTemplates.quoteAccepted(
+      quote.quoteNumber,
+      createdOrder.orderNumber,
+      createdOrder.id
+    );
+    await sendCustomerNotification({
+      userId: actor.id,
+      title: acceptedTemplate.title,
+      message: acceptedTemplate.message,
+      linkUrl: acceptedTemplate.linkUrl,
+      emailSubject: acceptedTemplate.emailSubject,
+      category: acceptedTemplate.category,
+      idempotencyKey: `quote-accepted:${quote.id}:order:${createdOrder.id}`,
     });
 
     return {

@@ -49,6 +49,12 @@ export function Header() {
             >
               How It Works
             </Link>
+            <Link
+              href="/contact"
+              className="text-zinc-700 hover:text-emerald-600 dark:text-zinc-300 dark:hover:text-emerald-400 transition-colors"
+            >
+              Support Desk
+            </Link>
           </nav>
         </div>
 

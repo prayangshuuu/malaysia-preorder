@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth/session";
 import { requireAdminOrStaff, assertResourceOwnership, AuthorizationError, isAdminOrStaffRole } from "@/lib/auth/rbac";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import {
   createOrVersionQuote,
   acceptQuote,
@@ -37,12 +38,12 @@ export async function GET(request: NextRequest) {
 
     const isStaff = isAdminOrStaffRole(session.role);
 
-    const where: any = {};
+    const where: Prisma.QuoteWhereInput = {};
     if (inquiryId) {
       where.inquiryId = inquiryId;
     }
     if (status) {
-      where.status = status;
+      where.status = status as Prisma.EnumQuoteStatusFilter["equals"];
     }
 
     if (!isStaff) {

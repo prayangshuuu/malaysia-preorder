@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local instruction / agent files
+AGENTS.md
+MASTER_PROMPT.md

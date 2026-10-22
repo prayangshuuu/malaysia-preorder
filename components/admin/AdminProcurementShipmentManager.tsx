@@ -8,6 +8,8 @@ import {
   addOrderTimelineEventAction,
 } from "@/app/actions/procurement-shipment";
 
+import { Prisma } from "@prisma/client";
+
 interface AdminProcurementShipmentManagerProps {
   order: {
     id: string;
@@ -19,15 +21,15 @@ interface AdminProcurementShipmentManagerProps {
       id: string;
       itemTitle: string;
       quantity: number;
-      unitPriceBDT: any;
+      unitPriceBDT: number | string | Prisma.Decimal;
     }>;
     procurements: Array<{
       id: string;
       procurementCode: string;
       status: string;
-      purchaseCostMYR: any;
-      exchangeRateUsed: any;
-      purchaseCostBDT: any;
+      purchaseCostMYR: number | string | Prisma.Decimal;
+      exchangeRateUsed: number | string | Prisma.Decimal;
+      purchaseCostBDT: number | string | Prisma.Decimal;
       supplierInvoiceRef: string | null;
       purchasedAt: Date | string | null;
       notes: string | null;
@@ -48,7 +50,7 @@ interface AdminProcurementShipmentManagerProps {
       status: string;
       dispatchOrigin: string;
       destinationCountry: string;
-      weightKg: any;
+      weightKg: number | string | Prisma.Decimal | null;
       events: Array<{
         id: string;
         status: string;
@@ -103,8 +105,8 @@ export function AdminProcurementShipmentManager({
       } else {
         setMessage({ type: "error", text: res.error || "Failed to record procurement." });
       }
-    } catch (err: any) {
-      setMessage({ type: "error", text: err.message || "An error occurred." });
+    } catch (err: unknown) {
+      setMessage({ type: "error", text: err instanceof Error ? err.message : "An error occurred." });
     } finally {
       setLoading(false);
     }
@@ -127,8 +129,8 @@ export function AdminProcurementShipmentManager({
       } else {
         setMessage({ type: "error", text: res.error || "Failed to create shipment." });
       }
-    } catch (err: any) {
-      setMessage({ type: "error", text: err.message || "An error occurred." });
+    } catch (err: unknown) {
+      setMessage({ type: "error", text: err instanceof Error ? err.message : "An error occurred." });
     } finally {
       setLoading(false);
     }
@@ -150,8 +152,8 @@ export function AdminProcurementShipmentManager({
       } else {
         setMessage({ type: "error", text: res.error || "Failed to record event." });
       }
-    } catch (err: any) {
-      setMessage({ type: "error", text: err.message || "An error occurred." });
+    } catch (err: unknown) {
+      setMessage({ type: "error", text: err instanceof Error ? err.message : "An error occurred." });
     } finally {
       setLoading(false);
     }
@@ -173,8 +175,8 @@ export function AdminProcurementShipmentManager({
       } else {
         setMessage({ type: "error", text: res.error || "Failed to add timeline event." });
       }
-    } catch (err: any) {
-      setMessage({ type: "error", text: err.message || "An error occurred." });
+    } catch (err: unknown) {
+      setMessage({ type: "error", text: err instanceof Error ? err.message : "An error occurred." });
     } finally {
       setLoading(false);
     }

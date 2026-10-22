@@ -1,87 +1,72 @@
-import { Pool } from "pg";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient, UserRole } from "@prisma/client";
-import { hashPassword } from "../lib/auth/session";
-import readline from "readline";
+import 'dotenv/config';
+import { prisma, pool } from '../lib/prisma';
+import { hashPassword } from '../lib/auth/password';
+import { UserRole } from '@prisma/client';
 
+/**
+ * Provision First Administrator Script
+ * Usage:
+ *   ADMIN_EMAIL="admin@yourcompany.com" ADMIN_PASSWORD="SecurePassword123!" tsx scripts/provision-admin.ts
+ */
 async function main() {
-  const email = process.argv[2] || process.env.INITIAL_ADMIN_EMAIL;
-  let password = process.argv[3] || process.env.INITIAL_ADMIN_PASSWORD;
+  const email = process.env.ADMIN_EMAIL;
+  const password = process.env.ADMIN_PASSWORD;
+  const name = process.env.ADMIN_NAME || 'Platform Administrator';
+  const phone = process.env.ADMIN_PHONE || '+8801800000000';
 
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
+  if (!email || !password) {
+    console.error('❌ Error: ADMIN_EMAIL and ADMIN_PASSWORD environment variables are required.');
+    console.error('Usage: ADMIN_EMAIL="..." ADMIN_PASSWORD="..." npx tsx scripts/provision-admin.ts');
+    process.exit(1);
+  }
+
+  if (password.length < 10) {
+    console.error('❌ Error: Admin password must be at least 10 characters.');
+    process.exit(1);
+  }
+
+  console.log(`🔒 Provisioning Superadmin user: ${email}...`);
+
+  const passwordHash = await hashPassword(password);
+
+  const admin = await prisma.user.upsert({
+    where: { email: email.toLowerCase().trim() },
+    create: {
+      email: email.toLowerCase().trim(),
+      name,
+      phone,
+      passwordHash,
+      role: UserRole.ADMIN,
+      emailVerified: new Date(),
+    },
+    update: {
+      role: UserRole.ADMIN,
+      passwordHash,
+      name,
+      emailVerified: new Date(),
+    },
   });
 
-  const question = (q: string): Promise<string> =>
-    new Promise((resolve) => rl.question(q, resolve));
+  // Ensure Wallet Account exists for the administrator
+  await prisma.walletAccount.upsert({
+    where: { userId: admin.id },
+    create: {
+      userId: admin.id,
+      currency: 'BDT',
+      isActive: true,
+    },
+    update: {},
+  });
 
-  const targetEmail = (email || (await question("Enter admin email address: "))).trim().toLowerCase();
-  if (!targetEmail || !targetEmail.includes("@")) {
-    console.error("❌ A valid email address is required.");
-    rl.close();
-    process.exit(1);
-  }
-
-  if (!password) {
-    password = await question("Enter admin password (min 8 characters): ");
-  }
-  rl.close();
-
-  if (!password || password.length < 8) {
-    console.error("❌ Admin password must be at least 8 characters.");
-    process.exit(1);
-  }
-
-  const connectionString =
-    process.env.DATABASE_URL ||
-    "postgresql://prayangshuuu@localhost:5432/malaysia_preorder?schema=public";
-  const pool = new Pool({ connectionString });
-  const adapter = new PrismaPg(pool);
-  const prisma = new PrismaClient({ adapter });
-
-  try {
-    const existing = await prisma.user.findUnique({
-      where: { email: targetEmail },
-    });
-
-    const passwordHash = await hashPassword(password);
-
-    if (existing) {
-      const updated = await prisma.user.update({
-        where: { id: existing.id },
-        data: {
-          role: UserRole.ADMIN,
-          passwordHash,
-          isActive: true,
-        },
-      });
-      console.log(`✅ Existing user ${updated.email} promoted to ADMIN successfully!`);
-    } else {
-      const created = await prisma.user.create({
-        data: {
-          name: "System Administrator",
-          email: targetEmail,
-          role: UserRole.ADMIN,
-          passwordHash,
-          isActive: true,
-          profile: {
-            create: {},
-          },
-          walletAccount: {
-            create: {},
-          },
-        },
-      });
-      console.log(`✅ Successfully provisioned initial ADMIN: ${created.email} (ID: ${created.id})`);
-    }
-  } catch (error) {
-    console.error("❌ Provisioning failed:", error);
-    process.exit(1);
-  } finally {
-    await prisma.$disconnect();
-    await pool.end();
-  }
+  console.log(`✅ Super Administrator successfully provisioned (ID: ${admin.id}, Role: ${admin.role})`);
 }
 
-main();
+main()
+  .catch((err) => {
+    console.error('❌ Failed to provision admin:', err);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+    await pool.end();
+  });

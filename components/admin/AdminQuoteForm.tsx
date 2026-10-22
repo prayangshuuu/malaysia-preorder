@@ -29,9 +29,17 @@ interface AdminQuoteFormProps {
       createdAt: string;
     }>;
   };
+  initialDefaults?: {
+    validityDays?: number;
+    serviceFeeBDT?: number;
+    customsFeeBDT?: number;
+    defaultRateMYRtoBDT?: number;
+    shippingOptions?: ShippingOption[];
+    standardCustomerNotes?: string;
+  };
 }
 
-export function AdminQuoteForm({ inquiry }: AdminQuoteFormProps) {
+export function AdminQuoteForm({ inquiry, initialDefaults }: AdminQuoteFormProps) {
   const router = useRouter();
 
   // Active quotation status check
@@ -51,47 +59,53 @@ export function AdminQuoteForm({ inquiry }: AdminQuoteFormProps) {
   ]);
 
   // Pricing & Fees
-  const [serviceFeeBDT, setServiceFeeBDT] = useState<number>(500);
-  const [customsFeeBDT, setCustomsFeeBDT] = useState<number>(0);
+  const [serviceFeeBDT, setServiceFeeBDT] = useState<number>(initialDefaults?.serviceFeeBDT ?? 500);
+  const [customsFeeBDT, setCustomsFeeBDT] = useState<number>(initialDefaults?.customsFeeBDT ?? 0);
   const [discountBDT, setDiscountBDT] = useState<number>(0);
 
   // Shipping options
-  const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([
-    {
-      id: "opt-air-std",
-      name: "Standard Air Courier (KL → Dhaka)",
-      description: "Direct flight cargo, door delivery across Bangladesh",
-      costBDT: 850,
-      estDaysMin: 7,
-      estDaysMax: 10,
-      isDefault: true,
-    },
-    {
-      id: "opt-air-exp",
-      name: "Express Air Priority (DHL / FedEx)",
-      description: "Priority processing and fast courier transit",
-      costBDT: 1850,
-      estDaysMin: 3,
-      estDaysMax: 5,
-      isDefault: false,
-    },
-  ]);
+  const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>(
+    initialDefaults?.shippingOptions && initialDefaults.shippingOptions.length > 0
+      ? initialDefaults.shippingOptions
+      : [
+          {
+            id: "opt-air-std",
+            name: "Standard Air Courier (KL → Dhaka)",
+            description: "Direct flight cargo, door delivery across Bangladesh",
+            costBDT: 850,
+            estDaysMin: 7,
+            estDaysMax: 10,
+            isDefault: true,
+          },
+          {
+            id: "opt-air-exp",
+            name: "Express Air Priority (DHL / FedEx)",
+            description: "Priority processing and fast courier transit",
+            costBDT: 1850,
+            estDaysMin: 3,
+            estDaysMax: 5,
+            isDefault: false,
+          },
+        ]
+  );
 
   // Private Sourcing Meta (Admin Only)
   const [estCostMYR, setEstCostMYR] = useState<number>(0);
-  const [estExchangeRate, setEstExchangeRate] = useState<number>(28.5);
+  const [estExchangeRate, setEstExchangeRate] = useState<number>(initialDefaults?.defaultRateMYRtoBDT ?? 28.5);
   const [adminNotes, setAdminNotes] = useState<string>("");
 
   // Customer Facing Metadata
-  const defaultValidDays = 7;
-  const initialValidDate = new Date(Date.now() + defaultValidDays * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
-  const [validUntil, setValidUntil] = useState<string>(initialValidDate);
+  const defaultValidDays = initialDefaults?.validityDays ?? 7;
+  const [validUntil, setValidUntil] = useState<string>(() => {
+    return new Date(Date.now() + defaultValidDays * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+  });
   const [estDispatchDaysMin, setEstDispatchDaysMin] = useState<number>(2);
   const [estDispatchDaysMax, setEstDispatchDaysMax] = useState<number>(5);
   const [customerNotes, setCustomerNotes] = useState<string>(
-    "100% original authentic product sourced directly from verified authorized retailers in Kuala Lumpur, Malaysia."
+    initialDefaults?.standardCustomerNotes ??
+      "100% original authentic product sourced directly from verified authorized retailers in Kuala Lumpur, Malaysia."
   );
   const [termsAndConditions, setTermsAndConditions] = useState<string>(
     "Pre-order confirmation is locked upon quote acceptance. Full or partial advance payment is required before Malaysia procurement commences. Transit times are estimated and may vary slightly due to airline schedules or Bangladesh customs clearance."
@@ -122,7 +136,7 @@ export function AdminQuoteForm({ inquiry }: AdminQuoteFormProps) {
     setLineItems(lineItems.filter((_, i) => i !== index));
   };
 
-  const updateLineItem = (index: number, field: string, value: any) => {
+  const updateLineItem = (index: number, field: string, value: string | number) => {
     const updated = [...lineItems];
     updated[index] = { ...updated[index], [field]: value };
     setLineItems(updated);
@@ -150,7 +164,7 @@ export function AdminQuoteForm({ inquiry }: AdminQuoteFormProps) {
     setShippingOptions(shippingOptions.filter((_, i) => i !== index));
   };
 
-  const updateShippingOption = (index: number, field: string, value: any) => {
+  const updateShippingOption = (index: number, field: string, value: string | number | boolean) => {
     const updated = [...shippingOptions];
     updated[index] = { ...updated[index], [field]: value };
     setShippingOptions(updated);

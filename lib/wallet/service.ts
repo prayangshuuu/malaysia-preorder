@@ -8,6 +8,7 @@ import {
   WalletLedgerEntryDTO,
 } from "./types";
 import { logAudit } from "../audit";
+import { sendCustomerNotification, NotificationTemplates } from "../notifications";
 
 export class WalletError extends Error {
   constructor(message: string, public readonly code: string, public readonly statusCode: number = 400) {
@@ -607,6 +608,27 @@ export async function refundOrderToWallet(params: {
         isCustomerVisible: true,
         createdById: params.actorId,
       },
+    });
+
+    // Notify customer about refund
+    const refundOrder = await tx.order.findUnique({
+      where: { id: refund.orderId },
+      select: { orderNumber: true },
+    });
+    const refundTemplate = NotificationTemplates.refundStatus(
+      refundOrder?.orderNumber || "ORDER",
+      minorUnitsToBDT(refundAmountMinor),
+      refund.reason || "Customer refund",
+      refund.orderId
+    );
+    await sendCustomerNotification({
+      userId: wallet.userId,
+      title: refundTemplate.title,
+      message: refundTemplate.message,
+      linkUrl: refundTemplate.linkUrl,
+      emailSubject: refundTemplate.emailSubject,
+      category: refundTemplate.category,
+      idempotencyKey: `refund-completed:${refund.id}`,
     });
 
     return {

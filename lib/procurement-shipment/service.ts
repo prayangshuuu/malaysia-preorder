@@ -6,6 +6,7 @@ import {
   validateProcurementStatusTransition,
   validateShipmentStatusTransition,
 } from "../orders/state-machine";
+import { sendCustomerNotification, NotificationTemplates } from "../notifications";
 import {
   RecordProcurementInput,
   UpdateProcurementStatusInput,
@@ -580,6 +581,55 @@ export async function addShipmentEvent(input: AddShipmentEventInput, actor: Staf
         },
       },
     });
+
+    // Notify customer on key transit milestones (Dispatched, Delayed, Delivered)
+    if (input.isPublic && shipment.order.customerId) {
+      if (input.status === ShipmentStatus.DISPATCHED) {
+        const notif = NotificationTemplates.dispatched(
+          shipment.order.orderNumber,
+          shipment.carrierName || "Direct Air Cargo",
+          shipment.orderId
+        );
+        await sendCustomerNotification({
+          userId: shipment.order.customerId,
+          title: notif.title,
+          message: notif.message,
+          linkUrl: notif.linkUrl,
+          emailSubject: notif.emailSubject,
+          category: notif.category,
+          idempotencyKey: `shipment-dispatched:${shipment.id}:${event.id}`,
+        });
+      } else if (input.status === ShipmentStatus.DELAYED) {
+        const notif = NotificationTemplates.shipmentDelay(
+          shipment.order.orderNumber,
+          input.description || "Flight schedule or cargo handling adjustment",
+          shipment.orderId
+        );
+        await sendCustomerNotification({
+          userId: shipment.order.customerId,
+          title: notif.title,
+          message: notif.message,
+          linkUrl: notif.linkUrl,
+          emailSubject: notif.emailSubject,
+          category: notif.category,
+          idempotencyKey: `shipment-delay:${shipment.id}:${event.id}`,
+        });
+      } else if (input.status === ShipmentStatus.DELIVERED) {
+        const notif = NotificationTemplates.delivered(
+          shipment.order.orderNumber,
+          shipment.orderId
+        );
+        await sendCustomerNotification({
+          userId: shipment.order.customerId,
+          title: notif.title,
+          message: notif.message,
+          linkUrl: notif.linkUrl,
+          emailSubject: notif.emailSubject,
+          category: notif.category,
+          idempotencyKey: `shipment-delivered:${shipment.id}:${event.id}`,
+        });
+      }
+    }
 
     return event;
   });

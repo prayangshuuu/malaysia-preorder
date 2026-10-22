@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { OrderStatus, ProcurementStatus, ShipmentStatus } from "@prisma/client";
+import { OrderStatus, ProcurementStatus, ShipmentStatus, PaymentStatus } from "@prisma/client";
 import {
   generateProcurementCode,
   generateShipmentNumber,
@@ -140,7 +140,7 @@ test("Customer Data Isolation: strictly isolates private supplier costs, receipt
     orderNumber: "ORD-20261022-XYZ999",
     customerId: "cust-iso-1",
     status: OrderStatus.PROCUREMENT,
-    paymentStatus: "SUCCEEDED" as any,
+    paymentStatus: PaymentStatus.SUCCEEDED,
     procurementStatus: ProcurementStatus.PURCHASED,
     shipmentStatus: ShipmentStatus.READY_TO_DISPATCH,
     currency: "BDT",

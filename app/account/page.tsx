@@ -64,7 +64,7 @@ export default async function AccountPage() {
       </div>
 
       {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 my-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 my-8">
         <Link
           href="/account/wallet"
           className="p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 hover:border-emerald-500 transition group block"
@@ -121,6 +121,20 @@ export default async function AccountPage() {
             {user._count.quotesAccepted}
           </div>
           <div className="text-xs text-zinc-400 mt-1">Accepted & pending quotes</div>
+        </Link>
+
+        <Link
+          href="/account/notifications"
+          className="p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 hover:border-emerald-500 transition group block"
+        >
+          <div className="flex items-center justify-between">
+            <div className="text-xs uppercase font-medium text-zinc-500 group-hover:text-emerald-600">Alerts</div>
+            <span className="text-xs text-emerald-600 font-semibold">View →</span>
+          </div>
+          <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-1">
+            History
+          </div>
+          <div className="text-xs text-zinc-400 mt-1">Notification log & updates</div>
         </Link>
       </div>
 

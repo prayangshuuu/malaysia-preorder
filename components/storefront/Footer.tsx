@@ -86,6 +86,22 @@ export function Footer() {
               </li>
               <li>
                 <Link
+                  href="/contact"
+                  className="text-zinc-600 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400"
+                >
+                  Contact & Support
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/contact"
+                  className="text-zinc-600 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400"
+                >
+                  Contact & Support Desk
+                </Link>
+              </li>
+              <li>
+                <Link
                   href="/policies/shipping"
                   className="text-zinc-600 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400"
                 >
@@ -98,6 +114,38 @@ export function Footer() {
                   className="text-zinc-600 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400"
                 >
                   100% Authenticity Guarantee
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/policies/terms"
+                  className="text-zinc-600 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400"
+                >
+                  Terms & Conditions
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/policies/refund"
+                  className="text-zinc-600 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400"
+                >
+                  Refund & Cancellation Policy
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/policies/privacy"
+                  className="text-zinc-600 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400"
+                >
+                  Privacy Policy
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/policies/wallet"
+                  className="text-zinc-600 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400"
+                >
+                  Wallet & Ledger Policy
                 </Link>
               </li>
             </ul>

@@ -3,6 +3,7 @@ import { getCurrentSession } from "@/lib/auth/session";
 import { requireAdminOrStaff, isAdminOrStaffRole } from "@/lib/auth/rbac";
 import { prisma } from "@/lib/prisma";
 import { AdminQuoteForm } from "@/components/admin/AdminQuoteForm";
+import { getBusinessSettings } from "@/lib/settings";
 import Link from "next/link";
 
 interface PageProps {
@@ -48,6 +49,8 @@ export default async function AdminInquiryQuotePage({ params }: PageProps) {
     notFound();
   }
 
+  const businessSettings = await getBusinessSettings();
+
   const clientInquiry = {
     id: inquiry.id,
     inquiryNumber: inquiry.inquiryNumber,
@@ -82,7 +85,17 @@ export default async function AdminInquiryQuotePage({ params }: PageProps) {
         </span>
       </div>
 
-      <AdminQuoteForm inquiry={clientInquiry} />
+      <AdminQuoteForm
+        inquiry={clientInquiry}
+        initialDefaults={{
+          validityDays: businessSettings.quoteDefaultValidityDays,
+          serviceFeeBDT: businessSettings.defaultServiceFeeBDT,
+          customsFeeBDT: businessSettings.defaultCustomsFeeBDT,
+          defaultRateMYRtoBDT: businessSettings.exchangeRateHandling.defaultRateMYRtoBDT,
+          shippingOptions: businessSettings.shippingOptions,
+          standardCustomerNotes: businessSettings.standardCustomerNotes,
+        }}
+      />
     </div>
   );
 }
